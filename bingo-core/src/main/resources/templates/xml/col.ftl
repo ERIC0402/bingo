@@ -1,0 +1,2 @@
+[#ftl]
+[#if tag.row.index > 0]<td title="[#if tag.body??]${tag.body!}[#elseif tag.property??][#if tag.value?? && tag.value?is_boolean]${tag.value?c!}[#else]${(tag.value!?html)!}[/#if][/#if]">[#if tag.body??]${tag.body!}[#elseif tag.property??][#if tag.value?? && tag.value?is_boolean]${tag.value?c}[#else]${(tag.value!?html)!}[/#if][#else]&nbsp;[/#if]</td>[/#if]

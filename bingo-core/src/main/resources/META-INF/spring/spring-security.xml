@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:security="http://www.springframework.org/schema/security"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+					http://www.springframework.org/schema/beans/spring-beans.xsd
+					http://www.springframework.org/schema/security
+					http://www.springframework.org/schema/security/spring-security.xsd">
+	
+	<security:http auto-config="false" use-expressions="false" entry-point-ref="authenticationEntryPoint">
+
+		<security:intercept-url pattern="/login/captcha"  access="IS_AUTHENTICATED_ANONYMOUSLY" />
+		<security:intercept-url pattern="/login"  access="IS_AUTHENTICATED_ANONYMOUSLY" />
+		<security:intercept-url pattern="/static/**"   access="IS_AUTHENTICATED_ANONYMOUSLY" />
+		<security:intercept-url pattern="/**"   access="ROLE_USER" />
+		
+		<security:access-denied-handler error-page="/security/denied"/>
+		
+		<security:logout logout-success-url="/login" />
+		
+		<security:remember-me services-alias="tokenBasedRememberMeServices" token-validity-seconds="60" />
+		
+		<security:csrf request-matcher-ref="csrfSecurityRequestMatcher"/> 
+		
+		<security:session-management session-authentication-strategy-ref="sessionAuthenticationStrategy" />
+		
+		<security:custom-filter ref="usernamePasswordCaptchaAuthenticationFilter" position="FORM_LOGIN_FILTER" />
+		
+		<security:custom-filter ref="concurrentSessionFilter" position="CONCURRENT_SESSION_FILTER"/>
+		
+		<security:custom-filter ref="filterSecurityInterceptor" before="FILTER_SECURITY_INTERCEPTOR" />
+		
+	</security:http>
+	
+	<bean id="authenticationEntryPoint" class="org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint">
+		<!-- 默认登录页的url（访问未登录页面时没有权限进入该页面） -->
+    	<constructor-arg index="0" value="/login" />
+	</bean>
+	
+	<!-- 用户名密码验证码记住我过滤器 -->
+	<bean id="usernamePasswordCaptchaAuthenticationFilter" class="org.bingo.security.filter.UsernamePasswordCaptchaAuthenticationFilter">
+    	<property name="authenticationManager" ref="authenticationManager" />
+    	<property name="authenticationSuccessHandler">
+    		<bean class="org.bingo.security.impl.AuthenticationSuccessHandlerImpl">	
+    			<property name="defaultTargetUrl" value="/home" />
+    			<property name="alwaysUseDefaultTargetUrl" value="false"/>
+    		</bean>
+    	</property>
+    	<property name="authenticationFailureHandler">
+    		<bean class="org.bingo.security.impl.AuthenticationFailureHandlerImpl">	
+    			<property name="defaultFailureUrl" value="/login?error" />
+    			<property name="useForward" value="true" />
+    		</bean>
+    	</property>
+    	<property name="sessionAuthenticationStrategy" ref="sessionAuthenticationStrategy"/>
+    	<property name="rememberMeServices" ref="tokenBasedRememberMeServices"/>
+    </bean>
+    
+    <!-- 更新session过滤器（判断session是否过期以及更新最新访问时间） -->
+    <bean id="concurrentSessionFilter" class="org.springframework.security.web.session.ConcurrentSessionFilter">  
+         <constructor-arg index="0" ref="sessionRegistry" />
+         <!-- 设置账户session过期路径 -->
+	  	 <constructor-arg index="1" value="/error/timeout.jsp" />
+    </bean>
+    
+    <!-- 安全拦截器（根据用户所拥有的权限和资源所要求的权限进行最终的判定）  -->
+	<bean id="filterSecurityInterceptor" class="org.bingo.security.filter.FilterSecurityInterceptor">
+		<!-- 获取用户的详细信息 -->
+		<property name="authenticationManager" ref="authenticationManager" />
+		<!-- 用户是否有足够的权限去访问某个资源 -->
+		<property name="accessDecisionManager" ref="accessDecisionManager" />
+		<!-- 资源源数据定义，即定义某一资源可以被哪些权限访问 -->
+		<property name="securityMetadataSource" ref="securityMetadataSource" />
+	</bean>
+    
+	<!-- 用户授权管理器（通过过滤器获取当前用户的授权信息，调用当前管理器验证该授权信息是否有效）：它负责管理authentication-provider，这些提供商根据过滤器提供的授权信息进行验证，其中有一个返回用户详细信息的则验证成功 -->
+	<security:authentication-manager alias="authenticationManager" erase-credentials="true" >
+		<!-- spring security本身提供了大量的provider供用户使用，如数据库认证，JAAS认证等等，一个webApp中可以同时使用多个provider -->
+		<security:authentication-provider ref="authenticationProvider"/>
+	</security:authentication-manager>
+	
+	<!-- 自定义用户信息处理提供商（根据userDetailsService提供的用户信息，进行验证，通过返回该用户信息） -->
+	<bean id="authenticationProvider" class="org.springframework.security.authentication.dao.DaoAuthenticationProvider">
+		<property name="hideUserNotFoundExceptions" value="false" />
+		<!-- 获取用户密码权限等信息 -->
+		<property name="userDetailsService" ref="userDetailsService" />
+		<property name="passwordEncoder" ref="passwordEncoder" />
+	</bean>
+	
+	<!-- 密码加密方式 -->
+    <bean id="passwordEncoder" class="org.springframework.security.authentication.encoding.Md5PasswordEncoder" />  
+    
+	<!-- 图片验证码 -->
+    <bean class="com.octo.captcha.service.multitype.GenericManageableCaptchaService">
+    	<constructor-arg index="0" ref="imageEngine" />
+    	<constructor-arg type="int" index="1" value="180" /><!--超时时间 秒 -->
+    	<constructor-arg type="int" index="2" value="20000" /><!--最大并发数 -->
+    	<constructor-arg type="int" index="3" value="20000" />
+  	</bean>
+  	
+  	<bean id="imageEngine" class="org.bingo.security.impl.ImageGenericCaptchaEngine"/>
+  	
+  	<!-- 
+  		CompositeSessionAuthenticationStrategy组合使用多个SessionAuthenticationStrategy
+  		注入到UsernamePasswordAuthenticationFilter中，否则默认使用的是NullAuthenticatedSessionStrategy，则获取不到登录用户数
+	-->
+	<bean id="sessionAuthenticationStrategy" class="org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy">
+	  <constructor-arg>
+	    <list>
+	      <!-- 用于判断当前用户session的人数是否超出上限 -->
+	      <bean class="org.springframework.security.web.authentication.session.ConcurrentSessionControlAuthenticationStrategy">
+	        <constructor-arg ref="sessionRegistry"/>
+	        <property name="maximumSessions" value="1" />
+	        <property name="exceptionIfMaximumExceeded" value="true" />
+	      </bean>
+	      <!-- session固定攻击（默认在用户登录后将新建一个session，同时将原session中的attribute都copy到新的session中） -->
+	      <bean class="org.springframework.security.web.authentication.session.SessionFixationProtectionStrategy" />
+	      <!-- 用户认证成功后sessionRegistry调用registerNewSession，保存用户的信息和session -->
+	      <bean class="org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy">
+	        <constructor-arg ref="sessionRegistry"/>
+	      </bean>
+	    </list>
+	  </constructor-arg>
+	</bean>
+	
+	<bean id="sessionRegistry" class="org.springframework.security.core.session.SessionRegistryImpl" />
+	
+	<bean id="csrfSecurityRequestMatcher" class="org.bingo.security.impl.CsrfSecurityRequestMatcherImpl">
+        <property name="includeUrls">
+            <list>
+                <value>/login</value>
+            </list>
+        </property>
+    </bean>
+  	
+</beans>

@@ -1,0 +1,177 @@
+<beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="http://www.springframework.org/schema/beans" xmlns:aop="http://www.springframework.org/schema/aop"
+    xmlns:context="http://www.springframework.org/schema/context" xmlns:tx="http://www.springframework.org/schema/tx"
+    xmlns:cache="http://www.springframework.org/schema/cache" xmlns:p="http://www.springframework.org/schema/p"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans 
+       http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+       http://www.springframework.org/schema/aop
+       http://www.springframework.org/schema/aop/spring-aop-4.0.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context-4.0.xsd
+       http://www.springframework.org/schema/tx
+       http://www.springframework.org/schema/tx/spring-tx-4.0.xsd
+       http://www.springframework.org/schema/cache http://www.springframework.org/schema/cache/spring-cache-4.0.xsd">
+       
+    <!-- 定义数据库连接池数据源bean destroy-method="close"的作用是当数据库连接不使用的时候,就把该连接重新放到数据池中,方便下次使用调用 -->
+    <!-- <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource" destroy-method="close">
+        设置JDBC驱动名称
+        <property name="driverClass" value="${jdbc.driver}" />
+        设置JDBC连接URL
+        <property name="jdbcUrl" value="${jdbc.url}" />
+        设置数据库用户名
+        <property name="user" value="${jdbc.username}" />
+        设置数据库密码
+        <property name="password" value="${jdbc.password}" />
+        请求超时时间
+		<property name="checkoutTimeout" value="30000" />
+		每60秒检查所有连接池中的空闲连接。默认值: 0，不检查
+		<property name="idleConnectionTestPeriod" value="30" />
+		连接数据库连接池最大空闲时间
+		<property name="maxIdleTime" value="30" />
+		连接池初始化连接数
+		<property name="initialPoolSize" value="5" />
+		<property name="minPoolSize" value="5" />
+		<property name="maxPoolSize" value="20" />
+		当连接池中的连接耗尽的时候c3p0一次同时获取的连接数。默认值: 3
+		<property name="acquireIncrement" value="5" />
+
+    </bean> -->
+    
+    <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" destroy-method="close">
+		<!-- 基本属性 url、user、password -->
+	    <property name="url" value="${dataSource.jdbcUrl}" />
+	    <property name="username" value="${dataSource.user}" />
+	    <property name="password" value="${dataSource.password}" />
+	   
+	       
+	    <!-- 配置初始化大小、最小、最大 -->
+	    <property name="initialSize" value="5" />
+	    <property name="minIdle" value="5" />
+	    <property name="maxActive" value="20" />
+	  
+	    <!-- 配置获取连接等待超时的时间 -->
+	    <property name="maxWait" value="60000" />
+	  
+	    <!-- 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒 -->
+	    <property name="timeBetweenEvictionRunsMillis" value="60000" />
+	  
+	    <!-- 配置一个连接在池中最小生存的时间，单位是毫秒 -->
+	    <property name="minEvictableIdleTimeMillis" value="300000" />
+	   
+	    <property name="validationQuery" value="SELECT 'x'" />  
+	    <property name="testWhileIdle" value="true" />
+	    <property name="testOnBorrow" value="false" />
+	    <property name="testOnReturn" value="false" />
+	  
+	    <!-- 打开PSCache，并且指定每个连接上PSCache的大小 -->
+	    <property name="poolPreparedStatements" value="true" />
+	    <property name="maxPoolPreparedStatementPerConnectionSize" value="20" />
+	  
+	    <!-- 配置监控统计拦截的filters，去掉后监控界面sql无法统计 -->
+	    <property name="filters" value="stat,config" />
+	    <property name="connectionProperties" value="config.decrypt=${dataSource.decrypt}" />
+	</bean>
+    
+    <bean class="org.springframework.beans.factory.config.PropertiesFactoryBean" id="hibernateConfig">
+		<property name="properties">
+			<props>
+				<!-- 设置数据库方言 -->
+				<prop key="hibernate.dialect">${hibernate.dialect}</prop>
+				<!-- 是否在控制台显示sql -->
+				<prop key="hibernate.show_sql">true</prop>
+				<!-- 是否格式化sql，优化显示 -->
+				<prop key="hibernate.format_sql">false</prop>
+                <!-- 设置自动创建|更新|验证数据库表结构 -->
+				<prop key="hibernate.hbm2ddl.auto">${hibernate.hbm2ddl.auto}</prop>
+				<!-- 是否开启二级缓存 -->
+				<prop key="hibernate.cache.use_second_level_cache">true</prop>
+				<!-- 是否开启查询缓存 -->
+				<prop key="hibernate.cache.use_query_cache">true</prop>
+				<!-- 高速缓存提供程序 -->  
+				<prop key="hibernate.cache.region.factory_class">org.hibernate.cache.ehcache.EhCacheRegionFactory</prop>
+				<!-- 指定缓存配置文件位置 -->
+				<prop key="hibernate.cache.provider_configuration_file_resource_path">ehcache.xml</prop>
+			</props>
+		</property>
+	</bean>
+
+    <!-- 配置hibernate的SessionFactory -->
+	<bean id="sessionFactory" class="org.springframework.orm.hibernate4.LocalSessionFactoryBean">
+		<!-- 注入数据源 相关信息看源码 -->
+		<property name="dataSource" ref="dataSource" />
+		<!-- 表命名策略 -->
+		<property name="namingStrategy" ref="railsNamingStrategy"/>
+		<!-- hibernate配置信息 -->
+		<property name="hibernateProperties" ref="hibernateConfig"/>
+		<!-- 扫描hibernate注解配置的entity -->
+		<property name="configLocations">
+			<value>classpath*:META-INF/hibernate/hibernate.cfg.xml</value>
+		</property>
+		<!-- 自动扫描实体对象 org.andy.shop.entity的包结构中存放实体类 -->
+		<!-- <property name="packagesToScan" value="org.andy.shop.entity." /> -->
+	</bean>
+    
+    <!-- 定义事务管理 -->
+    <bean id="transactionManager"
+        class="org.springframework.orm.hibernate4.HibernateTransactionManager">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+    
+    
+    <bean id="baseTransactionProxy"
+		class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean"
+		abstract="true">
+		<property name="transactionManager" ref="transactionManager"/>
+		<property name="transactionAttributes">
+			<props>
+				<!-- 事务执行方式
+              REQUIRED：指定当前方法必需在事务环境中运行，
+		                如果当前有事务环境就加入当前正在执行的事务环境，
+		                如果当前没有事务，就新建一个事务。
+		                这是默认值。 
+             -->
+				<prop key="save*">PROPAGATION_REQUIRED</prop>
+				<prop key="update*">PROPAGATION_REQUIRED</prop>
+				<prop key="delete*">PROPAGATION_REQUIRED</prop>
+				<prop key="batch*">PROPAGATION_REQUIRED</prop>
+				<prop key="execute*">PROPAGATION_REQUIRED</prop>
+				<prop key="remove*">PROPAGATION_REQUIRED</prop>
+				<prop key="create*">PROPAGATION_REQUIRED</prop>
+				<prop key="init*">PROPAGATION_REQUIRED</prop>
+				<prop key="authorize*">PROPAGATION_REQUIRED</prop> 
+				<!-- 
+			                指定当前方法以非事务方式执行操作，如果当前存在事务，就把当前事务挂起，等我以非事务的状态运行完，再继续原来的事务。 
+			                查询定义即可
+	              read-only="true"  表示只读
+	             -->
+				<prop key="*">PROPAGATION_REQUIRED,readOnly</prop>
+			</props>
+		</property>
+	</bean>
+
+
+	<bean id="entityDao" parent="baseTransactionProxy">
+		<property name="target">
+			<bean
+				class="org.bingo.hibernate.impl.HibernateEntityDao"
+				autowire="byName">
+			</bean>
+		</property>
+	</bean>
+	
+	<bean id="railsNamingStrategy" class="org.bingo.hibernate.support.RailsNamingStrategy">
+		<property name="tableNameConfig" ref="tableNameConfig"/>
+	</bean>
+	
+	<bean id="tableNameConfig" class="org.bingo.hibernate.support.DefaultTableNameConfig">
+		<property name="resource">
+			<bean class="org.bingo.spring.config.ConfigResource">
+				<property name="locations" value="classpath*:META-INF/hibernate/table.properties"/>
+				<property name="users" value="classpath*:hibernate/table.properties"/>
+			</bean>
+		</property>
+	</bean>
+	
+	<bean id="lobHandler" class="org.springframework.jdbc.support.lob.DefaultLobHandler" lazy-init="true"/>
+	
+</beans>

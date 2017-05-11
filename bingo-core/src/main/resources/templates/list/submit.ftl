@@ -1,0 +1,2 @@
+[#ftl]
+<input type="submit" id="${tag.id}" value="${tag.value!'提交'}" onclick="bg.form.submit('${tag.formId}', [#if tag.action??]'${tag.action}'[#else]null[/#if], [#if tag.target??]'${tag.target}'[#else]null[/#if], [#if tag.onsubmit??]${tag.onsubmit}[#else]null[/#if]); return false;" class="btn [#if tag.tagClass??]${tag.tagClass}[#else]btn-primary[/#if] pull-right" />

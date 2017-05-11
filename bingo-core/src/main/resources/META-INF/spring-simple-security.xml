@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:security="http://www.springframework.org/schema/security"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+					http://www.springframework.org/schema/beans/spring-beans.xsd
+					http://www.springframework.org/schema/security
+					http://www.springframework.org/schema/security/spring-security.xsd">
+	
+	<!-- http配置如何拦截用户请求。将auto-config设为'true'将自动配置几种常用的权限控制机制，包括form, anonymous, rememberMe。 -->
+	<security:http auto-config="true" use-expressions="false">
+
+		<!-- 
+			IS_AUTHENTICATED_ANONYMOUSLY 允许匿名用户进入
+			IS_AUTHENTICATED_FULLY 允许登录用户进入
+			IS_AUTHENTICATED_REMEMBERED 允许登录用户和rememberMe用户进入
+		 -->
+		 <!-- 
+	 		我们利用intercept-url来判断用户需要具有何种权限才能访问对应的url资源， 可以在pattern中指定一个特定的url资源，也可以使用通配符指定一组类似的url资源。 例子中定义的两个intercepter-url，第一个用来控制对/admin.jsp的访问，
+			第二个使用了通配符/**，说明它将控制对系统中所有url资源的访问。 在实际使用中，Spring Security采用的是一种就近原则， 就是说当用户访问的url资源满足多个intercepter-url时， 系统将使用第一个符合条件的intercept-url进行权限控制。
+			在我们这个例子中就是，当用户访问/admin.jsp时， 虽然两个intercept-url都满足要求， 但因为第一个intercept-url排在上面， 所以Spring Security会使用第一个intercept-url中的配置处理对/admin.jsp的请求，
+			也就是说，只有那些拥有了ROLE_ADMIN权限的用户才能访问/admin.jsp。
+		 -->
+		<security:intercept-url pattern="/security/captcha"  access="IS_AUTHENTICATED_ANONYMOUSLY" />
+		<security:intercept-url pattern="/security/login"  access="IS_AUTHENTICATED_ANONYMOUSLY" />
+		<security:intercept-url pattern="/resources/**"   access="IS_AUTHENTICATED_ANONYMOUSLY" />
+		
+		<!-- 
+            login-page：指定登录页面（访问未登录页面时没有权限进入该页面）。
+            login-processing-url：指定了客户在登录页面中按下 Sign In 按钮时要访问的 URL。与登录页面form的action一致。其默认值为：/login
+            authentication-failure-url：指定了身份验证失败时跳转到的页面。
+            default-target-url：指定了成功进行身份验证和授权后默认呈现给用户的页面。
+            always-use-default-target：指定了是否在身份验证通过后总是跳转到default-target-url属性指定的URL。
+         -->
+        <security:form-login 
+	        login-page="/security/login"
+			authentication-failure-url="/security/login?error"
+			default-target-url="/security/welcome"
+			always-use-default-target="false"/>
+		
+		<!-- 自定义权限不足处理程序或者返回页面（登录进系统后访问没有权限页面时触发） -->
+		<security:access-denied-handler error-page="/security/denied"/>
+		
+		<!-- 
+            logout-url：指定了用于响应退出系统请求的URL。其默认值为：/logout。
+            logout-success-url：退出系统后转向的URL。
+            invalidate-session：指定在退出系统时是否要销毁Session。
+         -->
+		<security:logout logout-success-url="/security/login" />
+		
+		<security:session-management invalid-session-url="/security/login">
+		 	<security:concurrency-control expired-url="/security/login" max-sessions="1" error-if-maximum-exceeded="true" />
+		</security:session-management> 
+		
+		<!-- 
+			启动设置UsernamePasswordAuthenticationFilter过滤器rememberMeServices参数为TokenBasedRememberMeServices来做remember-me操作，不加该配置，默认此参数未为NullRememberMeServices
+			services-alias 定义改service别名 供其他参数调用
+			token-validity-seconds 定义记住多长时间。单位：秒
+		 -->
+		<security:remember-me services-alias="tokenBasedRememberMeServices" token-validity-seconds="60" />
+		
+		<!-- 
+			UsernamePasswordAuthenticationFilter从表单中获取用户名和密码并验证是否正确
+			如果提交的表单action等于配置的login-processing-url，则执行验证（如果进行验证则不管对与否都不会执行后面的过滤器），否则执行后续过滤器
+			此过滤器继承UsernamePasswordAuthenticationFilter，且没有配置rememberMeServices参数，则默认设置为NullRememberMeServices，且调用父类的执行验证操作，所以不会执行后续过滤器，顾会导致<security:remember-me />失效，除非自定义rememberMeServices参数值
+		 -->
+		<security:custom-filter ref="captchaAuthenticaionFilter" before="FORM_LOGIN_FILTER" />
+		
+		<!-- 自定义filter custom-filter中before是在这个filter之前，after是之后，position是替换 -->
+		<security:custom-filter ref="filterSecurityInterceptor" before="FILTER_SECURITY_INTERCEPTOR" />
+		
+	</security:http> 
+	
+	<bean id="authenticationEntryPoint" class="org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint">
+		<!-- 默认登录页的url（访问未登录页面时没有权限进入该页面） -->
+    	<constructor-arg index="0" value="/login" />
+	</bean> 
+	
+	<!-- 自定义用户信息处理提供商（根据userDetailsService提供的用户信息，进行验证，通过返回该用户信息） -->
+	<bean id="authenticationProvider" class="org.springframework.security.authentication.dao.DaoAuthenticationProvider">
+		<property name="hideUserNotFoundExceptions" value="false" />
+		<!-- 获取用户密码权限等信息 -->
+		<property name="userDetailsService" ref="userDetailsService" />
+		<property name="passwordEncoder" ref="passwordEncoder" />
+	</bean>
+	
+	<!-- 密码加密方式 -->
+    <bean id="passwordEncoder" class="org.springframework.security.authentication.encoding.Md5PasswordEncoder" />  
+    
+	<!-- 用户授权管理器（通过过滤器获取当前用户的授权信息，调用当前管理器验证该授权信息是否有效）：它负责管理authentication-provider，这些提供商根据过滤器提供的授权信息进行验证，其中有一个返回用户详细信息的则验证成功 -->
+	<security:authentication-manager alias="authenticationManager" erase-credentials="true" >
+		<!-- spring security本身提供了大量的provider供用户使用，如数据库认证，JAAS认证等等，一个webApp中可以同时使用多个provider -->
+		<security:authentication-provider ref="authenticationProvider"/>
+	</security:authentication-manager>
+	
+	<!-- 根据用户所拥有的权限和资源所要求的权限进行最终的判定  -->
+	<bean id="filterSecurityInterceptor" class="org.bingo.security.filter.FilterSecurityInterceptor">
+		<!-- 获取用户的详细信息 -->
+		<property name="authenticationManager" ref="authenticationManager" />
+		<!-- 用户是否有足够的权限去访问某个资源 -->
+		<property name="accessDecisionManager" ref="accessDecisionManager" />
+		<!-- 资源源数据定义，即定义某一资源可以被哪些权限访问 -->
+		<property name="securityMetadataSource" ref="securityMetadataSource" />
+	</bean>
+	
+	<!-- 验证码拦截器 -->
+	<bean id="captchaAuthenticaionFilter" class="org.bingo.security.filter.UsernamePasswordCaptchaAuthenticationFilter">
+    	<property name="authenticationManager" ref="authenticationManager" />
+    	<property name="authenticationSuccessHandler">
+    		<bean class="org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler">	
+    			<property name="defaultTargetUrl" value="/security/welcome" />
+    			<property name="alwaysUseDefaultTargetUrl" value="false"/>
+    		</bean>
+    	</property>
+    	<property name="authenticationFailureHandler">
+    		<bean class="org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler">	
+    			<property name="defaultFailureUrl" value="/security/login?error" />
+    		</bean>
+    	</property>
+    	<property name="rememberMeServices" ref="tokenBasedRememberMeServices"/>
+    </bean>
+	
+	<!-- 图片验证码 -->
+    <bean class="com.octo.captcha.service.multitype.GenericManageableCaptchaService">
+    	<constructor-arg index="0" ref="imageEngine" />
+    	<constructor-arg type="int" index="1" value="180" /><!--超时时间 秒 -->
+    	<constructor-arg type="int" index="2" value="20000" /><!--最大并发数 -->
+    	<constructor-arg type="int" index="3" value="20000" />
+  	</bean>
+  	
+  	<bean id="imageEngine" class="org.bingo.security.impl.ImageGenericCaptchaEngine"/>
+
+</beans>

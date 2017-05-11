@@ -1,0 +1,2 @@
+[#ftl]
+[#if tag.row.index > 0]<td class="checkbox-column"><input name="${tag.name!}" value="${tag.value!}" [#if tag.checked?? && tag.checked]checked="checked"[/#if] type="${tag.type}" class="uniform"  title="${tag.value!'select me'}"/></td>[/#if]
